@@ -1,7 +1,6 @@
 # Route 53 Backup Solution
 
 [![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?logo=amazon-web-services&logoColor=white)](#)
-[![Cloud Formation](https://img.shields.io/badge/Cloud Formation-%F65CEE0.svg?logo=amazon-web-services&logoColor=white)](#)
 [![Python](https://img.shields.io/badge/Python%20IDLE-3776AB?logo=python&logoColor=fff)](#)
 
 A serverless solution to automatically back up all Amazon Route 53 hosted zones to an S3 bucket. This solution creates both JSON format backups (for programmatic use) and BIND-compatible zone files (for importing into Route 53 or other DNS services).
