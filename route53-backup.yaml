@@ -1,0 +1,312 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template to deploy Route 53 backup solution'
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket to store Route 53 backups
+    Default: route53-backups-ACCOUNT_ID
+  
+  LambdaFunctionName:
+    Type: String
+    Description: Name of the Lambda function that will perform Route 53 backups
+    Default: Route53Backup
+  
+  BackupSchedule:
+    Type: String
+    Description: Schedule expression for the backup (rate or cron expression)
+    Default: rate(1 day)
+    AllowedPattern: '(rate\(\d+ (minute|minutes|hour|hours|day|days|week|weeks)\))|(cron\(.+\))'
+
+Resources:
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 
+        - '${BucketNamePrefix}-${AWS::AccountId}'
+        - BucketNamePrefix: !Ref S3BucketName
+      Tags:
+        - Key: Name
+          Value: !Sub '${S3BucketName}-${AWS::AccountId}'
+  
+  BackupBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BackupBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !Sub 'arn:aws:s3:::${BackupBucket}'
+              - !Sub 'arn:aws:s3:::${BackupBucket}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': false
+  
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${LambdaFunctionName}-ExecutionRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: Route53BackupPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - route53:ListHostedZones
+                  - route53:ListResourceRecordSets
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::${BackupBucket}/*'
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${LambdaFunctionName}:*'
+      Tags:
+        - Key: Name
+          Value: !Sub '${LambdaFunctionName}-ExecutionRole'
+  
+  BackupLambdaFunction:
+    Type: AWS::Lambda::Function
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      FunctionName: !Ref LambdaFunctionName
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.9
+      Timeout: 300
+      MemorySize: 256
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref BackupBucket
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import time
+          from datetime import datetime
+          import os
+
+          def lambda_handler(event, context):
+              """
+              Lambda function to backup Route 53 hosted zones to S3 bucket.
+              Creates both JSON and zone file formats for each hosted zone.
+              """
+              # Initialize clients
+              route53 = boto3.client('route53')
+              s3 = boto3.client('s3')
+              
+              # S3 bucket name from environment variable
+              s3_bucket = os.environ['S3_BUCKET']
+              
+              # Get current date/time for folder structure
+              now = datetime.now()
+              year = now.strftime('%Y')
+              month = now.strftime('%m')
+              day = now.strftime('%d')
+              
+              # List all hosted zones
+              hosted_zones = route53.list_hosted_zones()
+              
+              for zone in hosted_zones['HostedZones']:
+                  zone_id = zone['Id'].split('/')[-1]  # Extract zone ID
+                  zone_name = zone['Name'].rstrip('.')  # Remove trailing dot
+                  
+                  print(f"Processing zone: {zone_name} (ID: {zone_id})")
+                  
+                  # Create folder structure for this zone
+                  folder_prefix = f"{zone_name}/{year}/{month}/{day}/"
+                  
+                  # Get all records for this zone
+                  records = []
+                  paginator = route53.get_paginator('list_resource_record_sets')
+                  page_iterator = paginator.paginate(HostedZoneId=zone_id)
+                  
+                  for page in page_iterator:
+                      records.extend(page['ResourceRecordSets'])
+                  
+                  # Create JSON backup
+                  json_data = {
+                      'HostedZoneId': zone_id,
+                      'HostedZoneName': zone_name,
+                      'ResourceRecordSets': records
+                  }
+                  
+                  # Create timestamp for filenames
+                  timestamp = now.strftime('%Y%m%d_%H%M%S')
+                  
+                  # Create JSON backup with hosted zone name and timestamp
+                  json_key = folder_prefix + f"{zone_name}_backup_{timestamp}.json"
+                  s3.put_object(
+                      Bucket=s3_bucket,
+                      Key=json_key,
+                      Body=json.dumps(json_data, indent=2),
+                      ContentType='application/json'
+                  )
+                  
+                  # Create zone file backup with hosted zone name and timestamp
+                  zone_file_content = generate_zone_file(zone_name, records)
+                  zone_file_key = folder_prefix + f"{zone_name}_{timestamp}.zone"
+                  
+                  s3.put_object(
+                      Bucket=s3_bucket,
+                      Key=zone_file_key,
+                      Body=zone_file_content,
+                      ContentType='text/plain'
+                  )
+                  
+                  print(f"Backup completed for zone {zone_name}")
+              
+              return {
+                  'statusCode': 200,
+                  'body': f'Successfully backed up {len(hosted_zones["HostedZones"])} hosted zones to S3'
+              }
+
+          def generate_zone_file(zone_name, records):
+              """
+              Generate a BIND-compatible zone file from Route 53 records.
+              """
+              # Start with SOA and default TTL
+              zone_file = f"$ORIGIN {zone_name}.\n"
+              zone_file += "$TTL 3600\n\n"
+              
+              # Process each record
+              for record in records:
+                  record_name = record['Name']
+                  record_type = record['Type']
+                  record_ttl = record.get('TTL', 3600)
+                  
+                  # Skip SOA and NS records at the zone apex as Route 53 will ignore them on import
+                  if record_type in ['SOA', 'NS'] and record_name == zone_name + '.':
+                      continue
+                  
+                  # Format the record name (remove zone name if it's at the end)
+                  if record_name == zone_name + '.':
+                      formatted_name = '@'
+                  else:
+                      formatted_name = record_name.replace(f'.{zone_name}.', '')
+                  
+                  # Start building the record line
+                  record_line = f"{formatted_name} {record_ttl} IN {record_type} "
+                  
+                  # Handle different record types
+                  if 'ResourceRecords' in record:
+                      if record_type == 'TXT':
+                          # TXT records need special handling with quotes
+                          values = []
+                          for value in record['ResourceRecords']:
+                              txt_value = value["Value"].strip('"')
+                              values.append(f'"{txt_value}"')
+                          record_line += ' '.join(values)
+                      elif record_type == 'MX':
+                          # MX records have priority and value
+                          values = []
+                          for value in record['ResourceRecords']:
+                              parts = value['Value'].split()
+                              if len(parts) >= 2:
+                                  priority = parts[0]
+                                  mx_host = ' '.join(parts[1:])
+                                  values.append(f"{priority} {mx_host}")
+                          record_line += ' '.join(values)
+                      else:
+                          # Standard records
+                          values = [value['Value'] for value in record['ResourceRecords']]
+                          record_line += ' '.join(values)
+                  elif 'AliasTarget' in record:
+                      # Handle alias records (not standard in BIND, but we'll include as a comment)
+                      dns_name = record['AliasTarget']['DNSName']
+                      record_line += f"; ALIAS {dns_name}"
+                  
+                  zone_file += record_line + "\n"
+              
+              return zone_file
+      Tags:
+        - Key: Name
+          Value: !Ref LambdaFunctionName
+  
+  # CloudWatch Logs group with 7-day retention
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${LambdaFunctionName}"
+      RetentionInDays: 7
+      Tags:
+        - Key: Name
+          Value: !Sub "${LambdaFunctionName}-Logs"
+  
+  SchedulerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${LambdaFunctionName}-SchedulerRole"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt BackupLambdaFunction.Arn
+      Tags:
+        - Key: Name
+          Value: !Sub '${LambdaFunctionName}-SchedulerRole'
+  
+  BackupScheduler:
+    Type: AWS::Scheduler::Schedule
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: !Sub "${LambdaFunctionName}-Scheduler"
+      Description: "EventBridge Scheduler for Route 53 backup"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      ScheduleExpression: !Ref BackupSchedule
+      Target:
+        Arn: !GetAtt BackupLambdaFunction.Arn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+      State: "ENABLED"
+
+Outputs:
+  BackupBucketName:
+    Description: Name of the S3 bucket storing Route 53 backups
+    Value: !Ref BackupBucket
+  
+  BackupLambdaFunction:
+    Description: Name of the Lambda function performing Route 53 backups
+    Value: !Ref LambdaFunctionName
+  
+  BackupSchedule:
+    Description: Schedule for Route 53 backups
+    Value: !Ref BackupSchedule
+  
+  BackupSchedulerName:
+    Description: Name of the EventBridge Scheduler
+    Value: !Ref BackupScheduler
