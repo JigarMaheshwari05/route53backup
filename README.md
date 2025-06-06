@@ -1,6 +1,6 @@
 # Route 53 Backup Solution
 
-![AWS](https://img.shields.io/badge/AWSlogo-grey?style=for-the-badge&logo=Amazon-web-services)
+![AWS](https://img.shields.io/badge/AWS-grey?style=for-the-badge&logo=Amazon-web-services)
 ![CloudFormation](https://img.shields.io/badge/CloudFormation-%23FF9900.svg?style=flat-square&logo=amazon-aws&logoColor=white)
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
