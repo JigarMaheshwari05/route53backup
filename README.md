@@ -17,6 +17,10 @@ A serverless solution to automatically back up all Amazon Route 53 hosted zones 
 - **Comprehensive Record Support**: Handles all Route 53 record types, including special formatting for TXT and MX records
 - **Alias Record Handling**: Includes comments for Route 53-specific features like alias records
 
+- **Automated Scheduling**: Configurable backup frequency using EventBridge Scheduler
+- **Security Best Practices**: Follows least privilege principle for IAM permissions
+- **Cost Optimization**: Configures 7-day log retention to minimize CloudWatch costs
+
 ### ⚠️ Important Note About Alias Records
 
 **Route 53 Alias records are AWS-specific and not part of standard DNS zone file format.**
@@ -29,9 +33,6 @@ When restoring from backups:
 - Use the JSON format for programmatic restoration of all record types including Alias records
 - The zone file format is suitable for standard DNS imports but will require manual handling of any Alias records
 
-- **Automated Scheduling**: Configurable backup frequency using EventBridge Scheduler
-- **Security Best Practices**: Follows least privilege principle for IAM permissions
-- **Cost Optimization**: Configures 7-day log retention to minimize CloudWatch costs
 
 ## 🏗️ Architecture
 
