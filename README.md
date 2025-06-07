@@ -5,9 +5,6 @@
 [![CloudFormation](https://img.shields.io/badge/CloudFormation-FF4F8B?logo=amazon-web-services&logoColor=white)](https://aws.amazon.com/cloudformation/)
 
 
-
-
-
 A serverless solution to automatically back up all Amazon Route 53 hosted zones to an S3 bucket. This solution creates both JSON format backups (for programmatic use) and BIND-compatible zone files (for importing into Route 53 or other DNS services).
 
 ## 📋 Features
