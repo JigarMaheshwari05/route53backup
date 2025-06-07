@@ -31,8 +31,8 @@ def lambda_handler(event, context):
         
         print(f"Processing zone: {zone_name} (ID: {zone_id})")
         
-        # Create folder structure for this zone
-        folder_prefix = f"{zone_name}/{year}/{month}/{day}/"
+        # Create folder structure for this zone including zone ID to avoid conflicts
+        folder_prefix = f"{zone_name}_{zone_id}/{year}/{month}/{day}/"
         
         # Get all records for this zone
         records = []
@@ -52,8 +52,8 @@ def lambda_handler(event, context):
         # Create timestamp for filenames
         timestamp = now.strftime('%Y%m%d_%H%M%S')
         
-        # Create JSON backup with hosted zone name and timestamp
-        json_key = folder_prefix + f"{zone_name}_backup_{timestamp}.json"
+        # Create JSON backup with hosted zone name, zone ID and timestamp
+        json_key = folder_prefix + f"{zone_name}_{zone_id}_backup_{timestamp}.json"
         s3.put_object(
             Bucket=s3_bucket,
             Key=json_key,
@@ -61,9 +61,9 @@ def lambda_handler(event, context):
             ContentType='application/json'
         )
         
-        # Create zone file backup with hosted zone name and timestamp
+        # Create zone file backup with hosted zone name, zone ID and timestamp
         zone_file_content = generate_zone_file(zone_name, records)
-        zone_file_key = folder_prefix + f"{zone_name}_{timestamp}.zone"
+        zone_file_key = folder_prefix + f"{zone_name}_{zone_id}_{timestamp}.zone"
         
         s3.put_object(
             Bucket=s3_bucket,
