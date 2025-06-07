@@ -2,7 +2,8 @@
 
 [![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?logo=amazon-web-services&logoColor=white)](https://aws.amazon.com/)
 [![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=fff)](https://www.python.org/)
-[![CloudFormation](https://img.shields.io/badge/CloudFormation-%23232F3E?logo=amazon-web-services&logoColor=white)](https://aws.amazon.com/cloudformation/)
+[![CloudFormation](https://img.shields.io/badge/CloudFormation-FF4F8B?logo=amazon-web-services&logoColor=white)](https://aws.amazon.com/cloudformation/)
+
 
 
 
