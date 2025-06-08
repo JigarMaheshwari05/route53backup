@@ -29,7 +29,7 @@ A serverless solution to automatically back up and restore Amazon Route 53 hoste
 
 ## 🏗️ Architecture
 
-![Route 53 Backup Solution Architecture](images/simplearchitecture.png)
+![Route 53 Backup Solution Architecture](images/simplearchiteture.png)
 
 This solution deploys the following AWS resources:
 
