@@ -52,8 +52,12 @@ This solution deploys the following AWS resources:
 #### Python Dependencies
 Install required Python packages:
 ```bash
-pip install boto3
+pip install boto3>=1.26.0
 ```
+
+#### AWS Configuration
+- **AWS CLI configured** with appropriate credentials
+- **IAM permissions** for Route 53 and health check operations (see IAM Policy section)
 
 ## 🚀 Deployment
 
