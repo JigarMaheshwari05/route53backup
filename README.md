@@ -1,53 +1,60 @@
-# Route 53 Backup Solution
+# Route 53 Backup & Restore Solution
 
 [![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?logo=amazon-web-services&logoColor=white)](https://aws.amazon.com/)
 [![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=fff)](https://www.python.org/)
 [![CloudFormation](https://img.shields.io/badge/CloudFormation-FF4F8B?logo=amazon-web-services&logoColor=white)](https://aws.amazon.com/cloudformation/)
 [![Route 53](https://img.shields.io/badge/Route_53-0052CC?logo=amazon-web-services&logoColor=white)](https://aws.amazon.com/route53/)
 
-A serverless solution to automatically back up all Amazon Route 53 hosted zones to an S3 bucket. This solution creates both JSON format backups (for programmatic use) and BIND-compatible zone files (for importing into Route 53 or other DNS services).
+A serverless solution to automatically back up and restore Amazon Route 53 hosted zones. This solution creates JSON format backups with comprehensive restore capabilities for disaster recovery and cross-account migrations.
 
 ## 📋 Features
 
+### Backup Features
 - **Complete Backup**: Automatically backs up all Route 53 hosted zones in your AWS account
-- **Organized Storage**: Creates folder structure in S3: `{zone_name}/{year}/{month}/{day}/`
-- **Dual Format Backups**:
-  - JSON file with complete record details: `{zone_name}_backup_{timestamp}.json`
-  - BIND-compatible zone file for import: `{zone_name}_{timestamp}.zone`
+- **Organized Storage**: Creates folder structure in S3: `{zone_name}_{zone_id}/{year}/{month}/{day}/`
+- **Duplicate Zone Handling**: Supports multiple zones with same domain name (public/private zones)
+- **JSON Format**: Complete record details with routing policies and health checks preserved
 - **Comprehensive Record Support**: Handles all Route 53 record types, including special formatting for TXT and MX records
-- **Alias Record Handling**: Includes comments for Route 53-specific features like alias records
-
+- **Alias Record Handling**: Preserves Route 53-specific features like alias records with full metadata
 - **Automated Scheduling**: Configurable backup frequency using EventBridge Scheduler
-- **Security Best Practices**: Follows least privilege principle for IAM permissions
-- **Cost Optimization**: Configures 7-day log retention to minimize CloudWatch costs
 
-### ⚠️ Important Note About Alias Records
-
-**Route 53 Alias records are AWS-specific and not part of standard DNS zone file format.**
-
-- **JSON Backups**: The `.json` backup files include complete information about all records, including AWS-specific Alias records that point to AWS resources like CloudFront distributions, ELB load balancers, and S3 buckets.
-
-- **Zone File Backups**: Standard DNS zone files (`.zone`) do not support the Alias record concept. In the generated zone files, Alias records are represented as comments with the original target information preserved for reference.
-
-When restoring from backups:
-- Use the JSON format for programmatic restoration of all record types including Alias records
-- The zone file format is suitable for standard DNS imports but will require manual handling of any Alias records
-
+### Restore Features
+- **Intelligent Restoration**: Smart conflict detection and resolution
+- **Domain Validation**: Prevents accidental cross-domain imports
+- **Health Check Validation**: Detects missing health checks and skips affected records
+- **Preflight Checks**: Comprehensive validation before making any changes
+- **Flexible Targeting**: Restore to original zone or specify different zone ID
+- **Dry Run Mode**: Preview changes without making modifications
+- **Cross-Account Support**: Safe migration between AWS accounts
 
 ## 🏗️ Architecture
 
 This solution deploys the following AWS resources:
 
 - **Lambda Function**: Performs the backup operation
-- **S3 Bucket**: Stores the backup files
+- **S3 Bucket**: Stores the JSON backup files
 - **EventBridge Scheduler**: Triggers the Lambda function on a schedule
 - **IAM Roles**: Provides necessary permissions with least privilege
 - **CloudWatch Logs**: Captures Lambda execution logs with 7-day retention
 
 ## 📦 Prerequisites
 
+### For Backup Deployment
 - AWS account with permissions to create Lambda functions, IAM roles, and S3 buckets
 - AWS CLI configured with appropriate credentials (if deploying manually)
+
+### For Restore Script
+
+#### System Requirements
+- **Python 3.7+** (Python 3.8+ recommended)
+- **Operating System**: Linux, macOS, or Windows with Python support
+
+#### Python Dependencies
+Install required Python packages:
+```bash
+pip install boto3
+```
+#
 
 ## 🚀 Deployment
 
@@ -55,41 +62,46 @@ This solution deploys the following AWS resources:
 
 Deploy the entire solution with a single CloudFormation template:
 
+#### CloudFormation Parameters
+
+| Parameter | Description | Default Value | Possible Values | Example |
+|-----------|-------------|---------------|-----------------|---------|
+| **S3BucketName** | Name prefix for the S3 backup bucket | `route53-backups` | Any valid S3 bucket name prefix | `my-route53-backups` |
+| **LambdaFunctionName** | Name for the Lambda function | `Route53Backup` | Valid Lambda function name | `MyRoute53Backup` |
+| **BackupSchedule** | Schedule expression for automated backups | `rate(1 day)` | See schedule options below | `rate(12 hours)` |
+
+#### Backup Schedule Options
+
+**Rate Expressions:**
+- `rate(1 minute)` - Every minute (testing only)
+- `rate(5 minutes)` - Every 5 minutes
+- `rate(1 hour)` - Every hour
+- `rate(6 hours)` - Every 6 hours
+- `rate(12 hours)` - Twice daily
+- `rate(1 day)` - Daily (recommended)
+- `rate(7 days)` - Weekly
+
+**Cron Expressions:**
+- `cron(0 0 * * ? *)` - Daily at midnight UTC
+- `cron(0 12 * * ? *)` - Daily at noon UTC
+- `cron(0 0 ? * MON *)` - Weekly on Monday at midnight
+- `cron(0 2 ? * MON-FRI *)` - Weekdays at 2 AM UTC
+- `cron(0 0 1 * ? *)` - Monthly on the 1st at midnight
+- `cron(0 0 ? * SUN *)` - Weekly on Sunday at midnight
+
+
+**Using AWS Console:**
 1. Navigate to AWS CloudFormation in your AWS console
 2. Select "Create stack" > "With new resources (standard)"
 3. Upload the `route53-backup.yaml` template file
-4. Configure the parameters:
-   - `S3BucketName`: Name prefix for your backup bucket
-   - `LambdaFunctionName`: Name for the Lambda function (default: Route53Backup)
-   - `BackupSchedule`: How often to run the backup
-     - `rate(1 day)` - Daily backup
-     - `rate(12 hours)` - Twice daily backup
-     - `rate(7 days)` - Weekly backup
-     - `cron(0 0 * * ? *)` - Daily at midnight UTC
-     - `cron(0 12 ? * MON-FRI *)` - Weekdays at noon UTC
+4. Configure the parameters as needed
 5. Complete the stack creation process
 
-Using AWS CLI:
-```bash
-aws cloudformation create-stack \
-  --stack-name Route53Backup \
-  --template-body file://route53-backup.yaml \
-  --capabilities CAPABILITY_NAMED_IAM
-```
 
-### Option 2: Manual Deployment
 
-If you prefer to set up components individually:
+## 🔐 IAM Policies
 
-1. Create an S3 bucket for storing backups
-2. Set up an IAM role with the required permissions (see IAM Policy section)
-3. Deploy the Lambda function using the provided Python code (`route53backup-lambda.py`)
-4. Configure an EventBridge Scheduler to trigger the Lambda function
-
-## 🔒 IAM Permissions
-
-### Lambda Execution Role
-
+### Backup Lambda Function 
 ```json
 {
     "Version": "2012-10-17",
@@ -107,31 +119,58 @@ If you prefer to set up components individually:
             "Action": [
                 "s3:PutObject"
             ],
-            "Resource": "arn:aws:s3:::your-route53-backup-bucket/*"
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents"
-            ],
-            "Resource": "arn:aws:logs:region:account-id:log-group:/aws/lambda/your-lambda-function-name:*"
+            "Resource": "arn:aws:s3:::your-backup-bucket/*"
         }
     ]
 }
 ```
 
-### EventBridge Scheduler Execution Role
-
+### EventBridge Scheduler Execution Role 
 ```json
 {
     "Version": "2012-10-17",
     "Statement": [
         {
             "Effect": "Allow",
-            "Action": "lambda:InvokeFunction",
-            "Resource": "arn:aws:lambda:region:account-id:function:your-lambda-function-name"
+            "Action": [
+                "lambda:InvokeFunction"
+            ],
+            "Resource": "arn:aws:lambda:*:*:function:your-lambda-function-name"
+        }
+    ]
+}
+```
+
+### Restore Script IAM Policy 
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Route53RestorePermissions",
+            "Effect": "Allow",
+            "Action": [
+                "route53:GetHostedZone",
+                "route53:ListResourceRecordSets",
+                "route53:ChangeResourceRecordSets"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "HealthCheckValidation",
+            "Effect": "Allow",
+            "Action": [
+                "route53:GetHealthCheck"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "S3BackupAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::your-backup-bucket/*"
         }
     ]
 }
@@ -140,13 +179,9 @@ If you prefer to set up components individually:
 ## 📊 Usage
 
 ### Automatic Backups
-
-Once deployed, the solution will automatically back up your Route 53 hosted zones according to the configured schedule using EventBridge Scheduler.
+Once deployed, backups run automatically according to the configured schedule.
 
 ### Manual Backup Trigger
-
-To manually trigger a backup:
-
 ```bash
 aws lambda invoke \
     --function-name Route53Backup \
@@ -154,91 +189,86 @@ aws lambda invoke \
     output.txt
 ```
 
-### Accessing Backups
-
-Backups are stored in your S3 bucket with the following path structure:
+### Backup File Structure
 ```
-s3://your-bucket/{zone_name}/{year}/{month}/{day}/{zone_name}_{timestamp}.zone
-s3://your-bucket/{zone_name}/{year}/{month}/{day}/{zone_name}_backup_{timestamp}.json
+s3://your-backup-bucket/
+├── example.com_Z1234567890ABC/
+│   └── 2025/06/08/
+│       └── example.com_Z1234567890ABC_backup_20250608_100000.json
+└── example.com_Z0987654321XYZ/  # Private zone with same domain
+    └── 2025/06/08/
+        └── example.com_Z0987654321XYZ_backup_20250608_100000.json
 ```
 
-## 🔄 Restoring from Backup
+## 📖 Restore Process
 
-To restore a hosted zone from a zone file backup:
+### Basic Usage
 
-1. Create a new hosted zone in Route 53 (if needed)
-2. In the Route 53 console, select the hosted zone
-3. Click "Import zone file"
-4. Paste the contents of the zone file (.zone) from your backup
-5. Click "Import"
+#### Restore to Original Zone
+```bash
+python route53_restore.py backup.json
+```
 
-## 🛠️ Customization
+#### Restore to Different Zone
+```bash
+python route53_restore.py backup.json --zone-id Z1234567890ABC
+```
 
-You can customize the solution by:
+#### Dry Run (Preview Changes)
+```bash
+python route53_restore.py backup.json --dry-run
+```
 
-- Modifying the backup schedule in the CloudFormation template
-- Adjusting the Lambda function code to change backup formats or folder structure
-- Adding S3 lifecycle rules to manage backup retention
+### Preflight Checks
+The restore script performs comprehensive validation:
 
-## 📝 Resource Retention
+1. **Domain Validation**: Ensures backup domain matches target zone
+2. **Health Check Validation**: Verifies referenced health checks exist
+3. **Conflict Detection**: Identifies existing records with different values
+4. **Record Categorization**: Classifies records as CREATE, UPDATE, or SKIP
 
-This CloudFormation template is configured with deletion policies to protect your resources:
+### Example Preflight Output
+```
+PREFLIGHT CHECK RESULTS:
+✅ 15 records to CREATE (new records)
+⚠️  3 records CONFLICT (exist with different values)
+ℹ️  5 records to SKIP (identical records already exist)
+🚫 2 records SKIPPED (missing health checks)
 
-- **S3 Bucket**: The backup bucket is configured with `DeletionPolicy: Retain` to ensure your backups are not deleted if the CloudFormation stack is removed.
-- **Lambda Function**: The Lambda function is configured with `DeletionPolicy: Retain` to preserve the function and its configuration.
-- **EventBridge Scheduler**: The scheduler is configured with `DeletionPolicy: Retain` to ensure backups continue to run even if the stack is deleted.
+MISSING HEALTH CHECKS:
+❌ Health Check ID: hc-1234567890abcdef
+   Please create this health check in the target account first.
+   Affected records:
+   - api.example.com A (Set: primary)
 
-This means that if you delete the CloudFormation stack, these resources will remain in your AWS account. To completely remove them, you'll need to delete them manually after stack deletion.
+💡 RECOMMENDATION:
+   1. Create the missing health checks in your target account
+   2. Re-run the import after health checks are created
+```
 
 ## ⚠️ Troubleshooting
 
-Common issues:
+### Backup Issues
+- **Lambda timeout**: Increase timeout if you have many hosted zones
+- **Permission errors**: Verify IAM roles have correct permissions
+- **Missing backups**: Check CloudWatch Logs for execution details
 
-- **Lambda timeout**: Increase the Lambda timeout if you have many hosted zones
-- **Permission errors**: Verify the IAM roles have the correct permissions
-- **Missing backups**: Check CloudWatch Logs for the Lambda function execution details
 
 ## 💰 Cost Considerations
 
-This solution uses several AWS services that may incur costs:
-
-- **Lambda**: Free tier includes 1M free requests per month and 400,000 GB-seconds of compute time
+- **Lambda**: Free tier includes 1M free requests per month
 - **S3**: Costs based on storage used and requests made
-- **CloudWatch Logs**: First 5GB of logs ingested is free, then $0.50 per GB
+- **CloudWatch Logs**: First 5GB of logs ingested is free
 - **EventBridge Scheduler**: $0.00864 per schedule per day
 
-With default settings and moderate usage, this solution should cost only a few dollars per month or may even fit within the AWS Free Tier.
+## 🔐 Security Best Practices
 
-## 🔐 Security Considerations
-
-This solution follows AWS security best practices:
-
-- **Least Privilege**: IAM roles have minimal permissions required
-- **Read-Only Operations**: The Lambda function only reads Route 53 data, it cannot modify or delete records
+- **Least Privilege**: IAM roles have minimal required permissions
+- **Read-Only Backup**: Lambda function only reads Route 53 data
 - **Secure Transport**: S3 bucket policy enforces HTTPS connections
-- **Log Management**: CloudWatch Logs configured with appropriate retention
+- **Domain Validation**: Prevents cross-domain imports
+- **Health Check Validation**: Prevents broken record imports
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-Copyright (c) 2025 Jigar Maheshwari
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
