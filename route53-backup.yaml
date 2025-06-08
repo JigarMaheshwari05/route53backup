@@ -33,6 +33,7 @@ Resources:
   
   BackupBucketPolicy:
     Type: AWS::S3::BucketPolicy
+    DeletionPolicy: Retain
     Properties:
       Bucket: !Ref BackupBucket
       PolicyDocument:
@@ -50,6 +51,7 @@ Resources:
   
   LambdaExecutionRole:
     Type: AWS::IAM::Role
+    DeletionPolicy: Retain
     Properties:
       RoleName: !Sub "${LambdaFunctionName}-ExecutionRole"
       AssumeRolePolicyDocument:
@@ -179,6 +181,7 @@ Resources:
   # CloudWatch Logs group with 7-day retention
   LambdaLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Retain
     Properties:
       LogGroupName: !Sub "/aws/lambda/${LambdaFunctionName}"
       RetentionInDays: 7
@@ -188,6 +191,7 @@ Resources:
   
   SchedulerExecutionRole:
     Type: AWS::IAM::Role
+    DeletionPolicy: Retain
     Properties:
       RoleName: !Sub "${LambdaFunctionName}-SchedulerRole"
       AssumeRolePolicyDocument:
