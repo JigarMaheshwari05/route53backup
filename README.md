@@ -54,7 +54,6 @@ Install required Python packages:
 ```bash
 pip install boto3
 ```
-#
 
 ## 🚀 Deployment
 

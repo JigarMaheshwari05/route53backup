@@ -5,7 +5,7 @@ Parameters:
   S3BucketName:
     Type: String
     Description: Name of the S3 bucket to store Route 53 backups
-    Default: route53-backups-ACCOUNT_ID
+    Default: route53-backups
   
   LambdaFunctionName:
     Type: String
