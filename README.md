@@ -262,7 +262,7 @@ MISSING HEALTH CHECKS:
 - **Lambda**: Free tier includes 1M free requests per month
 - **S3**: Costs based on storage used and requests made
 - **CloudWatch Logs**: First 5GB of logs ingested is free
-- **EventBridge Scheduler**: $0.00864 per schedule per day
+- **EventBridge Scheduler**: $1.05/million scheduled invocations per month, after 14 million free invocations per month (Mumbai region ap-south-1)
 
 ## 🔐 Security Best Practices
 
