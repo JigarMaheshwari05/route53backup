@@ -29,6 +29,8 @@ A serverless solution to automatically back up and restore Amazon Route 53 hoste
 
 ## 🏗️ Architecture
 
+![Route 53 Backup Solution Architecture](images/simplearchitecture.png)
+
 This solution deploys the following AWS resources:
 
 - **Lambda Function**: Performs the backup operation
